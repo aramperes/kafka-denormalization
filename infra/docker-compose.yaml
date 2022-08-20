@@ -40,6 +40,11 @@ services:
       cub kafka-ready -b kafka:9092 1 30;
       kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --partitions 4 --replication-factor 1 --topic hn.stories;
       kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --partitions 4 --replication-factor 1 --topic hn.comments;
+      kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --partitions 4 --replication-factor 1 --topic hn.comments-with-story;
+      kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --partitions 4 --replication-factor 1 --topic stories-comments-streaming-joined-subscription-registration-topic;
+      kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --partitions 4 --replication-factor 1 --topic stories-comments-streaming-joined-subscription-response-topic;
+      kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --partitions 4 --replication-factor 1 --topic stories-comments-streaming-joined-subscription-store-changelog;
+      kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --partitions 4 --replication-factor 1 --topic stories-comments-streaming-joined-changelog;
       "
     environment:
       # The following settings are listed here only to satisfy the image's requirements.
