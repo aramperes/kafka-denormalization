@@ -22,6 +22,10 @@ def inflate_story(id):
     return requests.get(f'https://hacker-news.firebaseio.com/v0/item/{id}.json').json()
 
 
+def partition(id):
+    return int(id) % 4
+
+
 while True:
     print('Fetching new stories...')
     stories = requests.get(
@@ -33,7 +37,11 @@ while True:
             continue
 
         story = inflate_story(story_id)
-        producer.send(topic, story, str(story_id))
+        if story is None:
+            continue
+
+        producer.send(topic, story, str(story_id),
+                      partition=partition(story_id))
         seen_stories.add(story_id)
         new_stories += 1
 
