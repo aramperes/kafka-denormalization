@@ -77,7 +77,9 @@ public class Stream {
                                 Comment.serde,
                                 Story.serde,
                                 JoinedCommentStoryEvent::new,
-                                (k, joined) -> joined.comment().id().toString())
+                                (k, joined) -> joined.comment().id().toString(),
+                                true,
+                                false)
                         , "index")
                 .to(topicJoined, Produced.with(Serdes.String(), JoinedCommentStoryEvent.serde));
     }
@@ -150,16 +152,23 @@ public class Stream {
 
         private final Lazy<KeyValueStore<Bytes, byte[]>> indexStore = Lazy.of(() -> context.getStateStore("index"));
 
+        private final boolean leftOuter;
+        private final boolean rightOuter;
+
         public JoinValueTransformer(
                 Serde<V> leftSerde,
                 Serde<FV> rightSerde,
                 ValueJoiner<V, FV, VR> valueJoiner,
-                KeyValueMapper<JoinKey, VR, KR> keyMapper
+                KeyValueMapper<JoinKey, VR, KR> keyMapper,
+                boolean leftOuter,
+                boolean rightOuter
         ) {
             this.leftSerde = leftSerde;
             this.rightSerde = rightSerde;
             this.valueJoiner = valueJoiner;
             this.keyMapper = keyMapper;
+            this.leftOuter = leftOuter;
+            this.rightOuter = rightOuter;
         }
 
         @Override
@@ -180,14 +189,18 @@ public class Stream {
                 var matchIndexKey = joinKey.getRight();
                 log.info("Received left-side {}, looking up indexed right using {}", joinKey, matchIndexKey);
 
-                var match = store.get(Bytes.wrap(JoinKey.serializer.serialize(null, matchIndexKey)));
+                var right = store.get(Bytes.wrap(JoinKey.serializer.serialize(null, matchIndexKey)));
 
-                // TODO: Support left-outer-join (emit right=NULL)
-                if (match != null) {
+                if (right != null) {
                     var leftDeser = leftSerde.deserializer().deserialize(null, value.get());
-                    var rightDeser = rightSerde.deserializer().deserialize(null, match);
+                    var rightDeser = rightSerde.deserializer().deserialize(null, right);
 
                     var joined = valueJoiner.apply(leftDeser, rightDeser);
+                    var key = keyMapper.apply(joinKey, joined);
+                    return List.of(KeyValue.pair(key, joined));
+                } else if (leftOuter) {
+                    var leftDeser = leftSerde.deserializer().deserialize(null, value.get());
+                    var joined = valueJoiner.apply(leftDeser, null);
                     var key = keyMapper.apply(joinKey, joined);
                     return List.of(KeyValue.pair(key, joined));
                 } else {
@@ -220,6 +233,13 @@ public class Stream {
                 if (!matched.isEmpty()) {
                     log.info("SCAN finished; emit {} join results", matched.size());
                 }
+
+                if (matched.isEmpty() && rightOuter) {
+                    var joined = valueJoiner.apply(null, rightDeser.get());
+                    var key = keyMapper.apply(joinKey, joined);
+                    return List.of(KeyValue.pair(key, joined));
+                }
+
                 return matched;
             }
         }
