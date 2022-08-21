@@ -70,15 +70,6 @@ services:
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
 
-  kibana:
-    image: docker.elastic.co/kibana/kibana:7.17.5
-    environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-    ports:
-      - 5601:5601
-    depends_on:
-      - elasticsearch
-
   elastic-setup:
     image: alpine:latest
     command: > 
@@ -94,15 +85,15 @@ services:
     depends_on:
       - elasticsearch
 
-  logstash:
-    image: docker.elastic.co/logstash/logstash:7.17.5
-    volumes:
-      - "./pipelines/pipelines.yml:/usr/share/logstash/config/pipelines.yml"
-      - "./pipelines/comments.conf:/usr/share/logstash/pipeline/comments/comments.conf"
-      - "./pipelines/stories.conf:/usr/share/logstash/pipeline/stories/stories.conf"
-    depends_on:
-      - kafka
-      - elasticsearch
+  # logstash:
+  #   image: docker.elastic.co/logstash/logstash:7.17.5
+  #   volumes:
+  #     - "./pipelines/pipelines.yml:/usr/share/logstash/config/pipelines.yml"
+  #     - "./pipelines/comments.conf:/usr/share/logstash/pipeline/comments/comments.conf"
+  #     - "./pipelines/stories.conf:/usr/share/logstash/pipeline/stories/stories.conf"
+  #   depends_on:
+  #     - kafka
+  #     - elasticsearch
 
 volumes:
   elasticsearch_data:
