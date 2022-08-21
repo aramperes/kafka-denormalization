@@ -72,6 +72,7 @@ public class Stream {
         // On start-up it will start reading from the beginning to rebuild its internal store.
         // When it receives a non-null primary key, it tries to find 1 foreign document to join with.
         // When it receives a null primary key, it scans for all documents with the foreign key.
+        // Make sure this topic has compaction enabled!
         builder.stream(topicIndex, Consumed.with(JoinKey.serde, Serdes.Bytes()).withOffsetResetPolicy(Topology.AutoOffsetReset.EARLIEST))
                 .flatTransform(() -> new JoinValueTransformer<>(
                                 Comment.serde,
