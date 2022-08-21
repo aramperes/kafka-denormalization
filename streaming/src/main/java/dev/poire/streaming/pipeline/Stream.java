@@ -4,6 +4,7 @@ import dev.poire.streaming.denorm.JoinKey;
 import dev.poire.streaming.denorm.JoinKeyProvider;
 import dev.poire.streaming.denorm.blake.Blake2bJoinKeyProvider;
 import dev.poire.streaming.dto.Comment;
+import dev.poire.streaming.dto.Story;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
@@ -45,6 +46,13 @@ public class Stream {
         builder.stream(topicComments, Consumed.with(Serdes.String(), Comment.serde))
                 .selectKey(new LeftKeyMapper<>(keyProvider, Serdes.String(), Serdes.String(), (k, comment) -> comment.story().toString()))
                 .to(topicIndex, Produced.with(JoinKey.serde, Comment.serde).withStreamPartitioner(new ForeignKeyPartitioner<>()));
+
+        // Right side of the join
+        // Every time a RIGHT is received, it will forward it to the INDEX topic, but re-keyed to have a NULL primary key,
+        // and also, it will manually repartition the output based on the foreign key only.
+        builder.stream(topicStories, Consumed.with(Serdes.String(), Story.serde))
+                .selectKey(new RightKeyMapper<>(keyProvider, Serdes.String()))
+                .to(topicIndex, Produced.with(JoinKey.serde, Story.serde).withStreamPartitioner(new ForeignKeyPartitioner<>()));
     }
 
     static class ForeignKeyPartitioner<V> implements StreamPartitioner<JoinKey, V> {
@@ -77,6 +85,24 @@ public class Stream {
             final var keySer = keySerializer.serializer().serialize(null, key);
             final var fkSer = foreignKeySerializer.serializer().serialize(null, fk);
             return keyProvider.generateJoinKey(fkSer, keySer);
+        }
+    }
+
+    static class RightKeyMapper<FK, V> implements KeyValueMapper<FK, V, JoinKey> {
+
+        private final JoinKeyProvider keyProvider;
+
+        private final Serde<FK> foreignKeySerializer;
+
+        public RightKeyMapper(JoinKeyProvider keyProvider, Serde<FK> foreignKeySerializer) {
+            this.keyProvider = keyProvider;
+            this.foreignKeySerializer = foreignKeySerializer;
+        }
+
+        @Override
+        public JoinKey apply(FK fk, V value) {
+            final var fkSer = foreignKeySerializer.serializer().serialize(null, fk);
+            return keyProvider.generateRightJoinKey(fkSer);
         }
     }
 

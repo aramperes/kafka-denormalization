@@ -17,7 +17,7 @@ public class Blake2bJoinKeyProvider implements JoinKeyProvider {
     public JoinKey generateRightJoinKey(byte[] right) {
         final byte[] rightDigest = new byte[digestSize];
         hash(right, rightDigest);
-        return new JoinKey(digestSize, rightDigest, new byte[digestSize]);
+        return new JoinKey(digestSize, rightDigest, /* NULL */ new byte[digestSize]);
     }
 
     @Override
