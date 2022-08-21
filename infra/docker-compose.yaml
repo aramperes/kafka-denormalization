@@ -41,13 +41,57 @@ services:
       kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --partitions 4 --replication-factor 1 --topic hn.stories;
       kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --partitions 4 --replication-factor 1 --topic hn.comments;
       kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --partitions 4 --replication-factor 1 --topic hn.comments-with-story;
-      kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --partitions 4 --replication-factor 1 --topic stories-comments-streaming-joined-subscription-registration-topic;
-      kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --partitions 4 --replication-factor 1 --topic stories-comments-streaming-joined-subscription-response-topic;
-      kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --partitions 4 --replication-factor 1 --topic stories-comments-streaming-joined-subscription-store-changelog;
-      kafka-topics --create --if-not-exists --zookeeper zookeeper:2181 --partitions 4 --replication-factor 1 --topic stories-comments-streaming-joined-changelog;
       "
     environment:
       # The following settings are listed here only to satisfy the image's requirements.
       # We override the image's `command` anyways, hence this container will not start a broker.
       KAFKA_BROKER_ID: ignored
       KAFKA_ZOOKEEPER_CONNECT: ignored
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.5
+    environment:
+      - xpack.security.enabled=false
+      - discovery.type=single-node
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - 9200:9200
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.5
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - 5601:5601
+    depends_on:
+      - elasticsearch
+    volumes:
+      - kibana_data:/usr/share/elasticsearch/data
+
+  elastic-setup:
+    image: alpine:latest
+    command: > 
+      /bin/sh -c "
+      apk add --no-cache bash curl;
+      /tmp/wait-for-it.sh elasticsearch:9200 -t 0 -- curl --request PUT --location http://elasticsearch:9200/_index_template/hn-comments --header 'Content-Type: application/json' --data '@/tmp/comments-index-template.json';
+      /tmp/wait-for-it.sh elasticsearch:9200 -t 0 -- curl --request PUT --location http://elasticsearch:9200/_index_template/hn-stories --header 'Content-Type: application/json' --data '@/tmp/stories-index-template.json';
+      "
+    volumes:
+      - "./wait-for-it.sh:/tmp/wait-for-it.sh"
+      - "./comments-index-template.json:/tmp/comments-index-template.json"
+      - "./stories-index-template.json:/tmp/stories-index-template.json"
+    depends_on:
+      - elasticsearch
+
+volumes:
+  elasticsearch_data:

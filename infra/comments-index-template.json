@@ -1,0 +1,23 @@
+{
+    "index_patterns": [
+        "hn-comments"
+    ],
+    "template": {
+        "mappings": {
+            "properties": {
+                "by": {
+                    "type": "keyword"
+                },
+                "type": {
+                    "type": "keyword"
+                },
+                "url": {
+                    "type": "keyword"
+                },
+                "text": {
+                    "type": "text"
+                }
+            }
+        }
+    }
+}
