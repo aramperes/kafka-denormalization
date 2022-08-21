@@ -84,14 +84,24 @@ services:
     command: > 
       /bin/sh -c "
       apk add --no-cache bash curl;
-      /tmp/wait-for-it.sh elasticsearch:9200 -t 0 -- curl --request PUT --location http://elasticsearch:9200/_index_template/hn-comments --header 'Content-Type: application/json' --data '@/tmp/comments-index-template.json';
       /tmp/wait-for-it.sh elasticsearch:9200 -t 0 -- curl --request PUT --location http://elasticsearch:9200/_index_template/hn-stories --header 'Content-Type: application/json' --data '@/tmp/stories-index-template.json';
+      /tmp/wait-for-it.sh elasticsearch:9200 -t 0 -- curl --request PUT --location http://elasticsearch:9200/_index_template/hn-stories-comments --header 'Content-Type: application/json' --data '@/tmp/joined-index-template.json';
       "
     volumes:
-      - "./wait-for-it.sh:/tmp/wait-for-it.sh"
-      - "./comments-index-template.json:/tmp/comments-index-template.json"
-      - "./stories-index-template.json:/tmp/stories-index-template.json"
+      - "./index/wait-for-it.sh:/tmp/wait-for-it.sh"
+      - "./index/stories-index-template.json:/tmp/stories-index-template.json"
+      - "./index/joined-index-template.json:/tmp/joined-index-template.json"
     depends_on:
+      - elasticsearch
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.17.5
+    volumes:
+      - "./pipelines/pipelines.yml:/usr/share/logstash/config/pipelines.yml"
+      - "./pipelines/comments.conf:/usr/share/logstash/pipeline/comments/comments.conf"
+      - "./pipelines/stories.conf:/usr/share/logstash/pipeline/stories/stories.conf"
+    depends_on:
+      - kafka
       - elasticsearch
 
 volumes:
