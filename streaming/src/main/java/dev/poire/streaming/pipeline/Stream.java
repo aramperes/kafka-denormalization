@@ -1,9 +1,9 @@
 package dev.poire.streaming.pipeline;
 
 import dev.poire.denormalize.schema.JoinKey;
+import dev.poire.denormalize.schema.JoinKeyProviders;
 import dev.poire.denormalize.schema.blake.Blake2bJoinKeyProvider;
 import dev.poire.denormalize.transform.JoinKeyPartitioner;
-import dev.poire.denormalize.transform.KeyMapper;
 import dev.poire.denormalize.transform.LeftKeyMapper;
 import dev.poire.denormalize.transform.RightKeyMapper;
 import dev.poire.streaming.dto.Comment;
@@ -48,20 +48,20 @@ public class Stream {
 
     @Autowired
     public void buildPipeline(StreamsBuilder builder) {
-        final var keyProvider = new Blake2bJoinKeyProvider((byte) 8);
+        final var keyProvider = JoinKeyProviders.Blake2b(8, Serdes.String(), Serdes.String());
 
         // Left side of the join
         // Every time a LEFT is received, it will forward it to the INDEX topic, but re-keyed to include the foreign key,
         // and also, it will manually partition the output based on the foreign key only.
         builder.stream(topicComments, Consumed.with(Serdes.String(), Comment.serde))
-                .selectKey(new LeftKeyMapper<>(keyProvider, Serdes.String(), Serdes.String(), (k, comment) -> comment.story().toString()))
+                .selectKey(keyProvider.joinOn((k, comment) -> comment.story().toString()))
                 .to(topicIndex, Produced.with(JoinKey.serde, Comment.serde).withStreamPartitioner(JoinKeyPartitioner.partitioner()));
 
         // Right side of the join
         // Every time a RIGHT is received, it will forward it to the INDEX topic, but re-keyed to have a NULL primary key,
         // and also, it will manually repartition the output based on the foreign key only.
         builder.stream(topicStories, Consumed.with(Serdes.String(), Story.serde))
-                .selectKey(new RightKeyMapper<>(keyProvider, Serdes.String()))
+                .selectKey(keyProvider.right())
                 .to(topicIndex, Produced.with(JoinKey.serde, Story.serde).withStreamPartitioner(JoinKeyPartitioner.partitioner()));
 
         // TODO: In-memory is OK since the store will be rebuilt from changelog, but we should archive the index periodically

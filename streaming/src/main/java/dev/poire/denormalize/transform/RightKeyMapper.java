@@ -5,20 +5,16 @@ import dev.poire.denormalize.schema.JoinKeyProvider;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.streams.kstream.KeyValueMapper;
 
-public class RightKeyMapper<FK, V> implements KeyValueMapper<FK, V, JoinKey> {
+public class RightKeyMapper<R, V> implements KeyValueMapper<R, V, JoinKey> {
 
-    private final JoinKeyProvider keyProvider;
+    private final JoinKeyProvider<?, R> keyProvider;
 
-    private final Serde<FK> foreignKeySerializer;
-
-    public RightKeyMapper(JoinKeyProvider keyProvider, Serde<FK> foreignKeySerializer) {
+    public RightKeyMapper(JoinKeyProvider<?, R> keyProvider) {
         this.keyProvider = keyProvider;
-        this.foreignKeySerializer = foreignKeySerializer;
     }
 
     @Override
-    public JoinKey apply(FK fk, V value) {
-        final var fkSer = foreignKeySerializer.serializer().serialize(null, fk);
-        return keyProvider.generateRightJoinKey(fkSer);
+    public JoinKey apply(R r, V value) {
+        return keyProvider.generateRightJoinKey(r);
     }
 }
