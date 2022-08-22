@@ -1,4 +1,4 @@
-package dev.poire.streaming.denorm.blake;
+package dev.poire.denormalize.schema.blake;
 
 /* !!! Doost !!! */
 
@@ -25,8 +25,8 @@ import java.security.Key;
 import java.security.spec.AlgorithmParameterSpec;
 import java.util.Arrays;
 
-import static dev.poire.streaming.denorm.blake.Blake2b.Engine.Assert.*;
-import static dev.poire.streaming.denorm.blake.Blake2b.Engine.LittleEndian.*;
+import static dev.poire.denormalize.schema.blake.Blake2b.Engine.Assert.*;
+import static dev.poire.denormalize.schema.blake.Blake2b.Engine.LittleEndian.*;
 
 interface Blake2b {
     // ---------------------------------------------------------------------

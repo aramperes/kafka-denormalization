@@ -1,17 +1,22 @@
-package dev.poire.streaming.denorm.blake;
+package dev.poire.denormalize.schema.blake;
 
-import dev.poire.streaming.denorm.JoinKey;
-import dev.poire.streaming.denorm.JoinKeyProvider;
+import dev.poire.denormalize.schema.JoinKey;
+import dev.poire.denormalize.schema.JoinKeyProvider;
 
 import static java.util.Optional.empty;
 import static java.util.Optional.of;
 
 /**
- * Generate composite join keys by hashing each size with "Blake2b" algorithm.
+ * Generate composite join keys by hashing each side with "Blake2b" algorithm.
  */
 public class Blake2bJoinKeyProvider implements JoinKeyProvider {
     private final byte digestSize;
 
+    /**
+     * Initializes the Blaze2b key provider, with the given digest size for each side.
+     *
+     * @param digestSize The size of each digest. Must be between 1 and 64, inclusive.
+     */
     public Blake2bJoinKeyProvider(byte digestSize) {
         this.digestSize = digestSize;
     }

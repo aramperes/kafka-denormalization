@@ -1,8 +1,8 @@
 package dev.poire.streaming.pipeline;
 
-import dev.poire.streaming.denorm.JoinKey;
-import dev.poire.streaming.denorm.JoinKeyProvider;
-import dev.poire.streaming.denorm.blake.Blake2bJoinKeyProvider;
+import dev.poire.denormalize.schema.JoinKey;
+import dev.poire.denormalize.schema.JoinKeyProvider;
+import dev.poire.denormalize.schema.blake.Blake2bJoinKeyProvider;
 import dev.poire.streaming.dto.Comment;
 import dev.poire.streaming.dto.JoinedCommentStoryEvent;
 import dev.poire.streaming.dto.Story;
@@ -91,7 +91,7 @@ public class Stream {
     static class ForeignKeyPartitioner<V> implements StreamPartitioner<JoinKey, V> {
         @Override
         public Integer partition(String topic, JoinKey key, V value, int numPartitions) {
-            return Utils.toPositive(Utils.murmur2(key.foreignKeyDigest())) % numPartitions;
+            return Utils.toPositive(Utils.murmur2(key.rightKeyDigest())) % numPartitions;
         }
     }
 
