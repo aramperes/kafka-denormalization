@@ -1,9 +1,11 @@
 package dev.poire.streaming.pipeline;
 
 import dev.poire.denormalize.schema.JoinKey;
-import dev.poire.denormalize.schema.JoinKeyProvider;
 import dev.poire.denormalize.schema.blake.Blake2bJoinKeyProvider;
 import dev.poire.denormalize.transform.JoinKeyPartitioner;
+import dev.poire.denormalize.transform.KeyMapper;
+import dev.poire.denormalize.transform.LeftKeyMapper;
+import dev.poire.denormalize.transform.RightKeyMapper;
 import dev.poire.streaming.dto.Comment;
 import dev.poire.streaming.dto.JoinedCommentStoryEvent;
 import dev.poire.streaming.dto.Story;
@@ -27,7 +29,6 @@ import org.springframework.stereotype.Component;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.function.BiFunction;
 
 @Component
 @Slf4j
@@ -85,50 +86,6 @@ public class Stream {
                                 false)
                         , "index")
                 .to(topicJoined, Produced.with(Serdes.String(), JoinedCommentStoryEvent.serde));
-    }
-
-    static class LeftKeyMapper<K, V, FK> implements KeyValueMapper<K, V, JoinKey> {
-
-        private final JoinKeyProvider keyProvider;
-
-        private final Serde<K> keySerializer;
-        private final Serde<FK> foreignKeySerializer;
-
-        private final BiFunction<K, V, FK> foreignKeyExtractor;
-
-        public LeftKeyMapper(JoinKeyProvider keyProvider, Serde<K> keySerializer, Serde<FK> foreignKeySerializer, BiFunction<K, V, FK> foreignKeyExtractor) {
-            this.keyProvider = keyProvider;
-            this.keySerializer = keySerializer;
-            this.foreignKeySerializer = foreignKeySerializer;
-            this.foreignKeyExtractor = foreignKeyExtractor;
-        }
-
-        @Override
-
-        public JoinKey apply(K key, V value) {
-            final var fk = foreignKeyExtractor.apply(key, value);
-            final var keySer = keySerializer.serializer().serialize(null, key);
-            final var fkSer = foreignKeySerializer.serializer().serialize(null, fk);
-            return keyProvider.generateJoinKey(fkSer, keySer);
-        }
-    }
-
-    static class RightKeyMapper<FK, V> implements KeyValueMapper<FK, V, JoinKey> {
-
-        private final JoinKeyProvider keyProvider;
-
-        private final Serde<FK> foreignKeySerializer;
-
-        public RightKeyMapper(JoinKeyProvider keyProvider, Serde<FK> foreignKeySerializer) {
-            this.keyProvider = keyProvider;
-            this.foreignKeySerializer = foreignKeySerializer;
-        }
-
-        @Override
-        public JoinKey apply(FK fk, V value) {
-            final var fkSer = foreignKeySerializer.serializer().serialize(null, fk);
-            return keyProvider.generateRightJoinKey(fkSer);
-        }
     }
 
     /**
