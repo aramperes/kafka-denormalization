@@ -14,12 +14,12 @@ import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
-import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.kstream.*;
 import org.apache.kafka.streams.processor.ProcessorContext;
 import org.apache.kafka.streams.processor.StreamPartitioner;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.Stores;
+import org.apache.kafka.streams.state.ValueAndTimestamp;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.util.Lazy;
@@ -64,22 +64,25 @@ public class Stream {
                 .selectKey(new RightKeyMapper<>(keyProvider, Serdes.String()))
                 .to(topicIndex, Produced.with(JoinKey.serde, Story.serde).withStreamPartitioner(new ForeignKeyPartitioner<>()));
 
-        // TODO: In-memory won't cut it on its own.
-        var indexStore = Stores.inMemoryKeyValueStore("index");
-        builder.addStateStore(Stores.keyValueStoreBuilder(indexStore, Serdes.Bytes(), Serdes.ByteArray()).withLoggingDisabled().withCachingDisabled());
+        // TODO: In-memory is OK since the store will be rebuilt from changelog, but we should archive the index periodically
+        // due to retention rules.
+        var indexSupplier = Stores.inMemoryKeyValueStore("index");
 
-        // The join, behaves like a KTable basically.
+        // The join.
         // On start-up it will start reading from the beginning to rebuild its internal store.
         // When it receives a non-null primary key, it tries to find 1 foreign document to join with.
         // When it receives a null primary key, it scans for all documents with the foreign key.
         // Make sure this topic has compaction enabled!
-        builder.stream(topicIndex, Consumed.with(JoinKey.serde, Serdes.Bytes()).withOffsetResetPolicy(Topology.AutoOffsetReset.EARLIEST))
+        var consumed = Consumed.with(JoinKey.serde, Serdes.Bytes());
+        var materialized = Materialized.<JoinKey, Bytes>as(indexSupplier);
+        builder.table(topicIndex, consumed, materialized)
+                .toStream()
                 .flatTransform(() -> new JoinValueTransformer<>(
                                 Comment.serde,
                                 Story.serde,
                                 JoinedCommentStoryEvent::new,
                                 (k, joined) -> joined.comment().id().toString(),
-                                true,
+                                false,
                                 false)
                         , "index")
                 .to(topicJoined, Produced.with(Serdes.String(), JoinedCommentStoryEvent.serde));
@@ -151,7 +154,7 @@ public class Stream {
         private final ValueJoiner<V, FV, VR> valueJoiner;
         private final KeyValueMapper<JoinKey, VR, KR> keyMapper;
 
-        private final Lazy<KeyValueStore<Bytes, byte[]>> indexStore = Lazy.of(() -> context.getStateStore("index"));
+        private final Lazy<KeyValueStore<JoinKey, ValueAndTimestamp<Bytes>>> indexStore = Lazy.of(() -> context.getStateStore("index"));
 
         private final boolean leftOuter;
         private final boolean rightOuter;
@@ -180,22 +183,18 @@ public class Stream {
         @Override
         public Iterable<KeyValue<KR, VR>> transform(JoinKey joinKey, Bytes value) {
             var store = indexStore.get();
-            var joinKeySer = JoinKey.serializer.serialize(null, joinKey);
-
-            // Store in index.
-            store.put(Bytes.wrap(joinKeySer), value.get());
+            log.info("Index {} store size {}", context.partition(), store.approximateNumEntries());
 
             if (joinKey.isLeft()) {
                 // Find matching foreign key record in index, and attempt join.
                 var matchIndexKey = joinKey.getRight();
                 log.info("Received left-side {}, looking up indexed right using {}", joinKey, matchIndexKey);
 
-                var right = store.get(Bytes.wrap(JoinKey.serializer.serialize(null, matchIndexKey)));
+                var right = store.get(matchIndexKey);
 
                 if (right != null) {
                     var leftDeser = leftSerde.deserializer().deserialize(null, value.get());
-                    var rightDeser = rightSerde.deserializer().deserialize(null, right);
-
+                    var rightDeser = rightSerde.deserializer().deserialize(null, right.value().get());
                     var joined = valueJoiner.apply(leftDeser, rightDeser);
                     var key = keyMapper.apply(joinKey, joined);
                     return List.of(KeyValue.pair(key, joined));
@@ -216,14 +215,11 @@ public class Stream {
                 // Lazily deserialize right value (always the same)
                 var rightDeser = Lazy.of(() -> rightSerde.deserializer().deserialize(null, value.get()));
 
-                final boolean[] hasSeenJoinKey = new boolean[1];
                 store.prefixScan(prefix, new ByteArraySerializer()).forEachRemaining(bytesKeyValue -> {
-                    // Ignore the join key itself
-                    if (!hasSeenJoinKey[0] && Arrays.equals(bytesKeyValue.key.get(), joinKeySer)) {
-                        hasSeenJoinKey[0] = true; // Optimization, to prevent doing 'equals' multiple times, since it can only happen once
-                    } else {
-                        var match = bytesKeyValue.value;
-                        var leftDeser = leftSerde.deserializer().deserialize(null, match);
+                    // Ignore the right join key itself
+                    if (bytesKeyValue.key.isLeft()) {
+                        var match = bytesKeyValue.value.value();
+                        var leftDeser = leftSerde.deserializer().deserialize(null, match.get());
 
                         var joined = valueJoiner.apply(leftDeser, rightDeser.get());
                         var key = keyMapper.apply(joinKey, joined);
