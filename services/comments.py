@@ -42,10 +42,6 @@ def inflate_comment(id, story):
     return comment
 
 
-def partition(id):
-    return int(id) % 4
-
-
 while True:
     print('Fetching new comments...')
     html = requests.get(
@@ -60,7 +56,7 @@ while True:
         if comment is None:
             continue
 
-        producer.send(topic, comment, str(comment_id), partition=partition(story_id))
+        producer.send(topic, comment, str(comment_id))
         seen_comments.add(comment_id)
         new_comments += 1
 
