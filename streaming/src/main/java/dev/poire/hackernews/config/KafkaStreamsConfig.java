@@ -1,4 +1,4 @@
-package dev.poire.streaming.config;
+package dev.poire.hackernews.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,7 +21,7 @@ public class KafkaStreamsConfig {
         return new KafkaStreamsConfiguration(Map.of(
                 APPLICATION_ID_CONFIG, "app",
                 BOOTSTRAP_SERVERS_CONFIG, "localhost:29092",
-                TOPOLOGY_OPTIMIZATION_CONFIG, "all"
+                TOPOLOGY_OPTIMIZATION_CONFIG, "all" // Note: required to prevent a separate changelog being created for the index topic.
         ));
     }
 }

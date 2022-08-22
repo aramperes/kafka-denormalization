@@ -1,4 +1,4 @@
-package dev.poire.streaming.dto;
+package dev.poire.hackernews.dto;
 
 import org.springframework.kafka.support.serializer.JsonSerde;
 

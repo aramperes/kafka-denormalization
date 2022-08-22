@@ -1,10 +1,10 @@
-package dev.poire.streaming.pipeline;
+package dev.poire.hackernews;
 
 import dev.poire.denormalize.dsl.StreamDenormalize;
 import dev.poire.denormalize.schema.JoinKeySchemas;
-import dev.poire.streaming.dto.Comment;
-import dev.poire.streaming.dto.JoinedCommentStoryEvent;
-import dev.poire.streaming.dto.Story;
+import dev.poire.hackernews.dto.Comment;
+import dev.poire.hackernews.dto.JoinedCommentStoryEvent;
+import dev.poire.hackernews.dto.Story;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.StreamsBuilder;
@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @Slf4j
-public class Stream {
+public class HackerNewsPipeline {
 
     @Value("${topics.stories}")
     private String topicStories;
