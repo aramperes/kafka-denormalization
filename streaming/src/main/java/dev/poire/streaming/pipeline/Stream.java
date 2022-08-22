@@ -3,6 +3,7 @@ package dev.poire.streaming.pipeline;
 import dev.poire.denormalize.schema.JoinKey;
 import dev.poire.denormalize.schema.JoinKeyProvider;
 import dev.poire.denormalize.schema.blake.Blake2bJoinKeyProvider;
+import dev.poire.denormalize.transform.JoinKeyPartitioner;
 import dev.poire.streaming.dto.Comment;
 import dev.poire.streaming.dto.JoinedCommentStoryEvent;
 import dev.poire.streaming.dto.Story;
@@ -11,12 +12,10 @@ import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.utils.Bytes;
-import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.kstream.*;
 import org.apache.kafka.streams.processor.ProcessorContext;
-import org.apache.kafka.streams.processor.StreamPartitioner;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.Stores;
 import org.apache.kafka.streams.state.ValueAndTimestamp;
@@ -55,14 +54,14 @@ public class Stream {
         // and also, it will manually partition the output based on the foreign key only.
         builder.stream(topicComments, Consumed.with(Serdes.String(), Comment.serde))
                 .selectKey(new LeftKeyMapper<>(keyProvider, Serdes.String(), Serdes.String(), (k, comment) -> comment.story().toString()))
-                .to(topicIndex, Produced.with(JoinKey.serde, Comment.serde).withStreamPartitioner(new ForeignKeyPartitioner<>()));
+                .to(topicIndex, Produced.with(JoinKey.serde, Comment.serde).withStreamPartitioner(JoinKeyPartitioner.partitioner()));
 
         // Right side of the join
         // Every time a RIGHT is received, it will forward it to the INDEX topic, but re-keyed to have a NULL primary key,
         // and also, it will manually repartition the output based on the foreign key only.
         builder.stream(topicStories, Consumed.with(Serdes.String(), Story.serde))
                 .selectKey(new RightKeyMapper<>(keyProvider, Serdes.String()))
-                .to(topicIndex, Produced.with(JoinKey.serde, Story.serde).withStreamPartitioner(new ForeignKeyPartitioner<>()));
+                .to(topicIndex, Produced.with(JoinKey.serde, Story.serde).withStreamPartitioner(JoinKeyPartitioner.partitioner()));
 
         // TODO: In-memory is OK since the store will be rebuilt from changelog, but we should archive the index periodically
         // due to retention rules.
@@ -86,13 +85,6 @@ public class Stream {
                                 false)
                         , "index")
                 .to(topicJoined, Produced.with(Serdes.String(), JoinedCommentStoryEvent.serde));
-    }
-
-    static class ForeignKeyPartitioner<V> implements StreamPartitioner<JoinKey, V> {
-        @Override
-        public Integer partition(String topic, JoinKey key, V value, int numPartitions) {
-            return Utils.toPositive(Utils.murmur2(key.rightKeyDigest())) % numPartitions;
-        }
     }
 
     static class LeftKeyMapper<K, V, FK> implements KeyValueMapper<K, V, JoinKey> {
