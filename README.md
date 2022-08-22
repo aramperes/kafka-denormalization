@@ -31,3 +31,24 @@ Our objective is to join these 2 topics into one. Each message will contain the 
     "story": {"by":"thesuperbigfrog","descendants":40,"id":32545513,"score":50,"time":1661124181,"title":"The Google Pixel 6a highlights everything wrong with the U.S. phone market","type":"story","url":"https://www.xda-developers.com/google-pixel-6a-us-market-editorial/"}
 }
 ```
+
+Using the DSL I made for this project, it can be represented like this:
+
+```java
+var indexStore = Stores.inMemoryKeyValueStore("index");
+
+StreamDenormalize.<String, Comment, String, Story, String, JoinedCommentStoryEvent>builder()
+        .keySchema(JoinKeySchemas.Blake2b(8, Serdes.String(), Serdes.String()))
+        .indexTopic("hn.index")
+            .indexStore(indexStore)
+        .leftTopic("hn.comments")
+            .leftSerde(Comment.serde)
+        .rightTopic("hn.stories")
+            .rightSerde(Story.serde)
+        .joinOn(comment -> comment.story().toString())
+            .joiner((comment, story) -> new JoinedCommentStoryEvent(comment, story))
+            .keyMapper((k, joined) -> joined.comment().id().toString())
+        .build()
+        .innerJoin(builder)
+            .to("hn.comments-with-story", Produced.with(Serdes.String(), JoinedCommentStoryEvent.serde));
+```

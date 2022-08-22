@@ -167,14 +167,14 @@ public class JoinTransformer<V, FV, KR, VR> implements Transformer<JoinKey, Byte
             // Lazily deserialize right value (always the same)
             var rightDeser = Lazy.of(() -> rightSerde.deserializer().deserialize(null, value.get()));
 
-            store.prefixScan(prefix, new ByteArraySerializer()).forEachRemaining(bytesKeyValue -> {
+            store.prefixScan(prefix, new ByteArraySerializer()).forEachRemaining(scanned -> {
                 // Ignore the right join key itself
-                if (bytesKeyValue.key.isLeft()) {
-                    var match = bytesKeyValue.value.value();
+                if (scanned.key.isLeft()) {
+                    var match = scanned.value.value();
                     var leftDeser = leftSerde.deserializer().deserialize(null, match.get());
 
                     var joined = valueJoiner.apply(leftDeser, rightDeser.get());
-                    var key = keyMapper.apply(joinKey, joined);
+                    var key = keyMapper.apply(scanned.key, joined);
                     matched.add(KeyValue.pair(key, joined));
                 }
             });
