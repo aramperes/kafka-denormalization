@@ -1,7 +1,7 @@
 package dev.poire.denormalize.schema.blake;
 
 import dev.poire.denormalize.schema.JoinKey;
-import dev.poire.denormalize.schema.JoinKeyProvider;
+import dev.poire.denormalize.schema.JoinKeySchema;
 import org.apache.kafka.common.serialization.Serde;
 
 import static java.util.Optional.empty;
@@ -10,7 +10,7 @@ import static java.util.Optional.of;
 /**
  * Generate composite join keys by hashing each side with "Blake2b" algorithm.
  */
-public class Blake2bJoinKeyProvider<L, R> implements JoinKeyProvider<L, R> {
+public class Blake2BJoinKeySchema<L, R> implements JoinKeySchema<L, R> {
     private final byte digestSize;
     private final Serde<L> leftSerde;
     private final Serde<R> rightSerde;
@@ -22,7 +22,7 @@ public class Blake2bJoinKeyProvider<L, R> implements JoinKeyProvider<L, R> {
      * @param leftSerde  The left-side key serializer, that will then be passed through the hasher.
      * @param rightSerde The right-side key serializer, that will then be passed through the hasher.
      */
-    public Blake2bJoinKeyProvider(byte digestSize, Serde<L> leftSerde, Serde<R> rightSerde) {
+    public Blake2BJoinKeySchema(byte digestSize, Serde<L> leftSerde, Serde<R> rightSerde) {
         this.digestSize = digestSize;
         this.leftSerde = leftSerde;
         this.rightSerde = rightSerde;
@@ -53,5 +53,15 @@ public class Blake2bJoinKeyProvider<L, R> implements JoinKeyProvider<L, R> {
         final Blake2b.Digest digest = Blake2b.Digest.newInstance(digestSize);
         digest.update(part);
         digest.digest(output, 0, digestSize);
+    }
+
+    @Override
+    public Serde<L> leftSerde() {
+        return leftSerde;
+    }
+
+    @Override
+    public Serde<R> rightSerde() {
+        return rightSerde;
     }
 }

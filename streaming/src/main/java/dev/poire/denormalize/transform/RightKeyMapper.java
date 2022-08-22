@@ -1,20 +1,19 @@
 package dev.poire.denormalize.transform;
 
 import dev.poire.denormalize.schema.JoinKey;
-import dev.poire.denormalize.schema.JoinKeyProvider;
-import org.apache.kafka.common.serialization.Serde;
+import dev.poire.denormalize.schema.JoinKeySchema;
 import org.apache.kafka.streams.kstream.KeyValueMapper;
 
 public class RightKeyMapper<R, V> implements KeyValueMapper<R, V, JoinKey> {
 
-    private final JoinKeyProvider<?, R> keyProvider;
+    private final JoinKeySchema<?, R> keySchema;
 
-    public RightKeyMapper(JoinKeyProvider<?, R> keyProvider) {
-        this.keyProvider = keyProvider;
+    public RightKeyMapper(JoinKeySchema<?, R> keySchema) {
+        this.keySchema = keySchema;
     }
 
     @Override
     public JoinKey apply(R r, V value) {
-        return keyProvider.generateRightJoinKey(r);
+        return keySchema.generateRightJoinKey(r);
     }
 }
