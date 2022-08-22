@@ -1,4 +1,0 @@
-- pipeline.id: comments-pipeline
-  path.config: "/usr/share/logstash/pipeline/comments/comments.conf"
-- pipeline.id: stories-pipeline
-  path.config: "/usr/share/logstash/pipeline/stories/stories.conf"
