@@ -35,9 +35,11 @@ Our objective is to join these 2 topics into one. Each message will contain the 
 Using the DSL I made for this project, it can be represented like this:
 
 ```java
-var indexStore = Stores.inMemoryKeyValueStore("index");
+@Autowired
+public void buildPipeline(StreamsBuilder builder) {
+    var indexStore = Stores.inMemoryKeyValueStore("index");
 
-StreamDenormalize.<String, Comment, String, Story, String, JoinedCommentStoryEvent>builder()
+    StreamDenormalize.<String, Comment, String, Story, String, JoinedCommentStoryEvent>builder()
         .keySchema(JoinKeySchemas.Blake2b(8, Serdes.String(), Serdes.String()))
         .indexTopic("hn.index")
             .indexStore(indexStore)
@@ -51,4 +53,5 @@ StreamDenormalize.<String, Comment, String, Story, String, JoinedCommentStoryEve
         .build()
         .innerJoin(builder)
             .to("hn.comments-with-story", Produced.with(Serdes.String(), JoinedCommentStoryEvent.serde));
+}
 ```
