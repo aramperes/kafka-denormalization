@@ -36,6 +36,10 @@ public interface JoinKeySchema<L, R> {
         return new LeftKeyMapper<>(this, rightExtractor);
     }
 
+    default LeftKeyMapper<L, L, R> joinOnKey(Function<L, R> rightExtractor) {
+        return new LeftKeyMapper<>(this, rightExtractor);
+    }
+
     default <V> RightKeyMapper<R, V> right() {
         return new RightKeyMapper<>(this);
     }

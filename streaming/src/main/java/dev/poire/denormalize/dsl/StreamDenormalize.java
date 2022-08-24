@@ -28,25 +28,36 @@ public class StreamDenormalize<LK, LV, RK, RV, JK, JV> {
     private final JoinKeySchema<LK, RK> keySchema;
     private final KeyValueBytesStoreSupplier indexStore;
     private final String indexTopic;
-
-    private final Function<LV, RK> joinOn;
+    private Function<LV, RK> joinOn;
+    private Function<LK, RK> joinOnKeys;
     private final ValueJoiner<LV, RV, JV> joiner;
     private final KeyValueMapper<JoinKey, JV, JK> keyMapper;
 
     public KStream<JK, JV> innerJoin(StreamsBuilder builder) {
+        if (joinOn != null && joinOnKeys != null)
+            throw new IllegalArgumentException("Must provide at most one of: joinOn, joinOnKeys");
+
         // Left side of the join
         // Every time a LEFT is received, it will forward it to the INDEX topic, but re-keyed to include the foreign key,
         // and also, it will manually partition the output based on the foreign key only.
-        builder.stream(leftTopic, Consumed.with(keySchema.leftSerde(), leftSerde))
-                .selectKey(keySchema.joinOn(joinOn))
-                .to(indexTopic, Produced.with(JoinKey.serde, leftSerde).withStreamPartitioner(partitioner()));
+        if (joinOn != null) {
+            builder.stream(leftTopic, Consumed.with(keySchema.leftSerde(), leftSerde))
+                    .selectKey(keySchema.joinOn(joinOn))
+                    .to(indexTopic, Produced.with(JoinKey.serde, leftSerde).withStreamPartitioner(partitioner()));
+        } else if (joinOnKeys != null) {
+            builder.stream(leftTopic, Consumed.with(keySchema.leftSerde(), Serdes.ByteArray()))
+                    .selectKey((k, v) -> keySchema.generateJoinKey(joinOnKeys.apply(k), k))
+                    .to(indexTopic, Produced.with(JoinKey.serde, Serdes.ByteArray()).withStreamPartitioner(partitioner()));
+        } else {
+            throw new IllegalArgumentException("Must provide one of: joinOn, joinOnKeys");
+        }
 
         // Right side of the join
         // Every time a RIGHT is received, it will forward it to the INDEX topic, but re-keyed to have a NULL primary key,
         // and also, it will manually repartition the output based on the foreign key only.
-        builder.stream(rightTopic, Consumed.with(keySchema.rightSerde(), rightSerde))
+        builder.stream(rightTopic, Consumed.with(keySchema.rightSerde(), Serdes.ByteArray()))
                 .selectKey(keySchema.right())
-                .to(indexTopic, Produced.with(JoinKey.serde, rightSerde).withStreamPartitioner(partitioner()));
+                .to(indexTopic, Produced.with(JoinKey.serde, Serdes.ByteArray()).withStreamPartitioner(partitioner()));
 
         // The join.
         // On start-up it will start reading from the beginning to rebuild its internal store.
