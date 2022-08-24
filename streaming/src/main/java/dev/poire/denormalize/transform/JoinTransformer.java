@@ -15,7 +15,9 @@ import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.ValueAndTimestamp;
 import org.springframework.data.util.Lazy;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -35,11 +37,11 @@ public class JoinTransformer<V, FV, KR, VR> implements Transformer<JoinKey, Byte
     private final Serde<FV> rightSerde;
     private final ValueJoiner<V, FV, VR> valueJoiner;
     private final KeyValueMapper<JoinKey, VR, KR> keyMapper;
-
     private final Lazy<KeyValueStore<JoinKey, ValueAndTimestamp<Bytes>>> indexStore = Lazy.of(() -> context.getStateStore("index"));
-
     private final boolean leftOuter;
     private final boolean rightOuter;
+    private HashSet<JoinKey> batchInnerJoins;
+    private long batchStreamTime = Long.MIN_VALUE;
 
     /**
      * Processes an update from either side of the join, and emits the joined values.
@@ -49,7 +51,7 @@ public class JoinTransformer<V, FV, KR, VR> implements Transformer<JoinKey, Byte
      * @param valueJoiner Function that combines the two sides into the desired output.
      * @param keyMapper   Function used to produce the output key.
      * @param leftOuter   Whether this is a left-outer-join, i.e., unmatched left updates will be emitted with a null right side.
-     * @param rightOuter  Whether this is a right-outer-join, i.e., unmatched right updates will be emitted with a null right side.
+     * @param rightOuter  Whether this is a right-outer-join, i.e., unmatched right updates will be emitted with a null left side.
      */
     public JoinTransformer(
             Serde<V> leftSerde,
@@ -135,15 +137,19 @@ public class JoinTransformer<V, FV, KR, VR> implements Transformer<JoinKey, Byte
     @Override
     public Iterable<KeyValue<KR, VR>> transform(JoinKey joinKey, Bytes value) {
         var store = indexStore.get();
-        log.trace("Index {} store size {}", context.partition(), store.approximateNumEntries());
 
         if (joinKey.isLeft()) {
+            if (!ensureJoinUniqueInBatch(joinKey)) {
+                /// Prevent sending out the same join in this record batch
+                return List.of();
+            }
+
             // Find matching foreign key record in index, and attempt join.
             var matchIndexKey = joinKey.getRight();
-            log.debug("Received left-side {}, looking up indexed right using {}", joinKey, matchIndexKey);
+
+            log.trace("Received left-side {}, looking up indexed right using {}", joinKey, matchIndexKey);
 
             var right = store.get(matchIndexKey);
-
             if (right != null) {
                 var leftDeser = leftSerde.deserializer().deserialize(null, value.get());
                 var rightDeser = rightSerde.deserializer().deserialize(null, right.value().get());
@@ -161,15 +167,15 @@ public class JoinTransformer<V, FV, KR, VR> implements Transformer<JoinKey, Byte
         } else {
             // Perform local prefix scan for all possible joins on this side.
             var prefix = joinKey.getPrefix();
-            log.debug("Received right-side {}, performing local prefix scan using {}", joinKey, Arrays.toString(prefix));
+            log.trace("Received right-side {}, performing local prefix scan using {}", joinKey, Arrays.toString(prefix));
 
             final List<KeyValue<KR, VR>> matched = new LinkedList<>();
             // Lazily deserialize right value (always the same)
             var rightDeser = Lazy.of(() -> rightSerde.deserializer().deserialize(null, value.get()));
 
             store.prefixScan(prefix, new ByteArraySerializer()).forEachRemaining(scanned -> {
-                // Ignore the right join key itself
-                if (scanned.key.isLeft()) {
+                // Ignore the right join key (same as joinKey)
+                if (scanned.key.isLeft() && ensureJoinUniqueInBatch(scanned.key)) {
                     var match = scanned.value.value();
                     var leftDeser = leftSerde.deserializer().deserialize(null, match.get());
 
@@ -180,7 +186,7 @@ public class JoinTransformer<V, FV, KR, VR> implements Transformer<JoinKey, Byte
             });
 
             if (!matched.isEmpty()) {
-                log.debug("SCAN finished; emit {} join results", matched.size());
+                log.trace("SCAN finished; emit {} join results", matched.size());
             }
 
             if (matched.isEmpty() && rightOuter) {
@@ -190,6 +196,28 @@ public class JoinTransformer<V, FV, KR, VR> implements Transformer<JoinKey, Byte
             }
 
             return matched;
+        }
+    }
+
+    /**
+     * Ensures that the given 'complete' {@link JoinKey} has not already been produced within this batch.
+     * If this is a new batch, or if the key has not been produced yet, it will prevent it from being produced again within
+     * the current batch.
+     *
+     * @param joinKey A combined (left+right) {@link JoinKey}
+     * @return true if this is an unseen join in this batch, false otherwise.
+     */
+    private boolean ensureJoinUniqueInBatch(JoinKey joinKey) {
+        if (joinKey.isRight()) {
+            throw new IllegalArgumentException("Right-side JoinKey should not be checked for batch duplicate");
+        }
+        if (context.currentStreamTimeMs() != batchStreamTime) {
+            batchStreamTime = context.currentStreamTimeMs();
+            batchInnerJoins = new HashSet<>();
+            batchInnerJoins.add(joinKey);
+            return true;
+        } else {
+            return batchInnerJoins.add(joinKey);
         }
     }
 

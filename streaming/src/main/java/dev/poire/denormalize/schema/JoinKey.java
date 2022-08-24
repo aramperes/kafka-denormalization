@@ -9,6 +9,7 @@ import org.apache.kafka.common.serialization.Serializer;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.Optional;
 
 import static java.util.Optional.empty;
@@ -101,5 +102,24 @@ public record JoinKey(byte digestSize, byte[] rightKeyDigest, Optional<byte[]> l
     public String toString() {
         // "[hex]-[hex]" pair
         return String.format("%s-%s", Hex.encodeHexString(rightKeyDigest), leftKeyDigest.map(Hex::encodeHexString).orElse("NULL"));
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof final JoinKey o)) return false;
+        return digestSize == o.digestSize &&
+                Arrays.equals(rightKeyDigest, o.rightKeyDigest) &&
+                leftKeyDigest
+                        .flatMap(left -> o.leftKeyDigest.map(oLeft -> Arrays.equals(left, oLeft)))
+                        .orElseGet(() -> leftKeyDigest.isEmpty() && o.leftKeyDigest.isEmpty());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(
+                digestSize,
+                Arrays.hashCode(rightKeyDigest),
+                leftKeyDigest.map(Arrays::hashCode).orElse(0)
+        );
     }
 }
