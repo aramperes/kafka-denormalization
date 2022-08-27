@@ -1,7 +1,7 @@
 # kafka-denormalization
 
 This is a sample project to denormalize two Kafka topics into one. In other words,
-it performs a one-to-many join between two topics based on a foreign key, and emits
+it performs a many-to-one join between two topics based on a foreign key, and emits
 the joined data to a third topic.
 
 The basic use-case is for when your data is already being produced on some topics, and you need
